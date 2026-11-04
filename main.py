@@ -22,7 +22,7 @@ class Game:
         self.player_size = 16
         self.player_id = self.canvas.create_polygon(self.player_x, self.player_y-self.player_size, self.player_x+self.player_size, self.player_y, self.player_x, self.player_y+self.player_size, self.player_x-self.player_size, self.player_y, fill="#c084fc", outline="#f3e8ff", width=2)
         
-        self.player_speed = 4.8
+        self.max_speed = 5.0
         self.lives = 3
         self.enemies_remaining = 50
         self.spawn_counter = 0
@@ -34,15 +34,12 @@ class Game:
         
         self.mouse_x = 400
         self.mouse_y = 340
-        self.pressed_keys = set()
         
         self.aim_line = self.canvas.create_line(0, 0, 0, 0, fill="#a855f7", dash=(3, 3), width=1)
         self.crosshair = self.canvas.create_oval(0, 0, 0, 0, outline="#e879f9", width=1.5)
         
         self.canvas.bind("<Motion>", self.on_mouse_move)
-        self.canvas.bind("<Button-1>", self.on_mouse_click)
-        self.root.bind("<KeyPress>", self.on_key_press)
-        self.root.bind("<KeyRelease>", self.on_key_release)
+        self.canvas.bind("<Button-3>", self.on_right_click)
         
         for _ in range(5): self.spawn_enemy()
         self.update_game()
@@ -57,7 +54,7 @@ class Game:
         self.mouse_x = max(0, min(800, event.x))
         self.mouse_y = max(45, min(640, event.y))
 
-    def on_mouse_click(self, event):
+    def on_right_click(self, event):
         if self.mouse_y <= 45: return
         angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
         spd = 24
@@ -68,16 +65,6 @@ class Game:
         for _ in range(6):
             self.particles.append({"x": self.player_x, "y": self.player_y, "dx": random.uniform(-3, 3), "dy": random.uniform(-3, 3), "life": 10, "color": "#c084fc", "id": self.canvas.create_oval(self.player_x-2, self.player_y-2, self.player_x+2, self.player_y+2, fill="#f0abfc", outline="")})
 
-    def on_key_press(self, event):
-        if event.char:
-            self.pressed_keys.add(event.char.lower())
-        self.pressed_keys.add(event.keysym.lower())
-
-    def on_key_release(self, event):
-        if event.char:
-            self.pressed_keys.discard(event.char.lower())
-        self.pressed_keys.discard(event.keysym.lower())
-
     def spawn_enemy(self):
         if self.enemies_remaining <= 0: return
         side = random.choice(["top", "bottom", "left", "right"])
@@ -86,23 +73,30 @@ class Game:
         elif side == "left": x, y = 0, random.randint(55, 640)
         else: x, y = 800, random.randint(55, 640)
         e_id = self.canvas.create_rectangle(x, y, x+18, y+18, fill="#ef4444", outline="#fca5a5", width=1)
-        self.enemies.append({"id": e_id, "base_speed": random.uniform(1.2, 2.5), "speed": 2.0, "offset": random.uniform(0, 6.28), "timer": random.randint(30, 90), "mode": "flank", "x": x, "y": y})
+        self.enemies.append({"id": e_id, "base_speed": random.uniform(0.6, 1.3), "speed": 1.0, "offset": random.uniform(0, 6.28), "timer": random.randint(50, 120), "mode": "flank", "x": x, "y": y})
         self.enemies_remaining -= 1
 
     def update_game(self):
         self.spawn_counter += 1
-        if self.spawn_counter >= 250:
+        if self.spawn_counter >= 560:
             self.spawn_counter = 0
             for _ in range(5): self.spawn_enemy()
             
-        dx, dy = 0, 0
-        if "w" in self.pressed_keys or "up" in self.pressed_keys or "ц" in self.pressed_keys: dy -= self.player_speed
-        if "s" in self.pressed_keys or "down" in self.pressed_keys or "ы" in self.pressed_keys: dy += self.player_speed
-        if "a" in self.pressed_keys or "left" in self.pressed_keys or "ф" in self.pressed_keys: dx -= self.player_speed
-        if "d" in self.pressed_keys or "right" in self.pressed_keys or "в" in self.pressed_keys: dx += self.player_speed
+        dist_to_mouse = math.hypot(self.mouse_x - self.player_x, self.mouse_y - self.player_y)
+        if dist_to_mouse > 5:
+            angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
+            current_speed = min(self.max_speed, dist_to_mouse * 0.08)
+            move_x = math.cos(angle) * current_speed
+            move_y = math.sin(angle) * current_speed
+            self.player_x += move_x
+            self.player_y += move_y
+            
+            if current_speed > 1.5:
+                p_id = self.canvas.create_oval(self.player_x-3, self.player_y-3, self.player_x+3, self.player_y+3, fill="#d8b4fe", outline="")
+                self.particles.append({"x": self.player_x, "y": self.player_y, "dx": random.uniform(-1.5, 1.5), "dy": random.uniform(-1.5, 1.5), "life": 14, "color": "#c084fc", "id": p_id})
         
-        self.player_x = max(self.player_size+15, min(800-self.player_size-15, self.player_x+dx))
-        self.player_y = max(45+self.player_size+15, min(640-self.player_size-15, self.player_y+dy))
+        self.player_x = max(self.player_size+15, min(800-self.player_size-15, self.player_x))
+        self.player_y = max(45+self.player_size+15, min(640-self.player_size-15, self.player_y))
         
         self.canvas.coords(self.player_id, self.player_x, self.player_y-self.player_size, self.player_x+self.player_size, self.player_y, self.player_x, self.player_y+self.player_size, self.player_x-self.player_size, self.player_y)
         
@@ -144,9 +138,9 @@ class Game:
         for enemy in self.enemies:
             enemy["timer"] -= 1
             if enemy["timer"] <= 0:
-                enemy["timer"] = random.randint(40, 100)
+                enemy["timer"] = random.randint(50, 120)
                 enemy["mode"] = random.choice(["flank", "rush", "retreat", "circle"])
-                enemy["base_speed"] = random.uniform(1.0, 3.2)
+                enemy["base_speed"] = random.uniform(0.5, 1.8)
                 
             e_coords = self.canvas.coords(enemy["id"])
             if not e_coords: continue
@@ -160,7 +154,7 @@ class Game:
             elif enemy["mode"] == "circle": angle = base_angle + math.pi/2
             else: angle = base_angle
             
-            spd = enemy["base_speed"] * (1.6 if enemy["mode"] == "rush" else 1.0)
+            spd = enemy["base_speed"] * (1.5 if enemy["mode"] == "rush" else 1.0)
             edx, edy = math.cos(angle)*spd, math.sin(angle)*spd
             self.canvas.move(enemy["id"], edx, edy)
             
@@ -187,7 +181,7 @@ class Game:
         for part in self.particles[:]:
             self.canvas.move(part["id"], part["dx"], part["dy"])
             part["life"] -= 1
-            if part["life"] <= 0:
+            if part["life"]<=0:
                 self.canvas.delete(part["id"])
                 self.particles.remove(part)
 

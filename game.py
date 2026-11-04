@@ -12,11 +12,22 @@ class GameLevel:
         self.level = level
         self.on_return_menu = on_return_menu
         self.loop_id = None
-        self.is_running = True
+        self.is_running = False
         
         self.setup_level()
 
     def setup_level(self):
+        # 1. Жестко глушим любой старый поток
+        self.stop()
+        
+        # 2. Полностью очищаем списки сущностей, чтобы старые объекты не висели в памяти
+        self.enemies = []
+        self.flying_lasers = []
+        self.particles = []
+        self.trails = []
+        self.boss = None
+        
+        # 3. Чистим весь холст
         self.canvas.delete("all")
         self.draw_stone_arena()
         
@@ -32,6 +43,7 @@ class GameLevel:
         self.laser_bar_bg = self.canvas.create_rectangle(435, 18, 555, 24, fill="#1c1c28", outline="#3a3a4f")
         self.laser_bar_fill = self.canvas.create_rectangle(436, 19, 554, 23, fill="#a855f7", outline="")
         
+        # 4. Создаем нового игрока
         self.player = Player(self.canvas)
         self.player.x = WINDOW_WIDTH / 2
         self.player.y = (WINDOW_HEIGHT + 50) / 2
@@ -61,12 +73,6 @@ class GameLevel:
         self.is_paused = False
         self.is_game_over = False
         self.is_victory = False
-        self.boss = None
-        
-        self.enemies = []
-        self.flying_lasers = []
-        self.particles = []
-        self.trails = []
         
         self.mouse_x = WINDOW_WIDTH / 2
         self.mouse_y = (WINDOW_HEIGHT + 50) / 2
@@ -91,8 +97,7 @@ class GameLevel:
         for _ in range(5): 
             self.spawn_enemy()
 
-        if self.loop_id:
-            self.root.after_cancel(self.loop_id)
+        self.is_running = True
         self.update_game()
 
     def draw_stone_arena(self):
@@ -120,6 +125,7 @@ class GameLevel:
                 self.root.after_cancel(self.loop_id)
             except:
                 pass
+            self.loop_id = None
 
     def spawn_enemy(self):
         if self.enemies_remaining <= 0: return
@@ -470,6 +476,5 @@ class GameLevel:
             self.canvas.coords(self.laser_bar_fill, 436, 19, 436 + int(118 * (self.laser_stamina / 100.0)), 23)
             self.canvas.itemconfig(self.ui_lives, text=f"LIVES: {self.lives}")
 
-        # ГАРАНТИРОВАННЫЙ ЗАПУСК СЛЕДУЮЩЕГО КАДРА ИГРОВОГО ЦИКЛА
         if self.is_running:
             self.loop_id = self.root.after(16, self.update_game)

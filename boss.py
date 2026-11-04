@@ -23,11 +23,10 @@ class Boss:
         self.attack_timer = 70
         self.is_warning = False
         self.warning_ticks = 0
-        self.current_aim_angle = 0.0  # Текущий угол лазера
+        self.current_aim_angle = 0.0
         self.warning_line = None
 
     def update(self, player_x, player_y, canvas, particles):
-        # Движение босса
         angle = math.atan2(player_y - self.y, player_x - self.x)
         self.x += math.cos(angle) * self.speed
         self.y += math.sin(angle) * self.speed
@@ -44,9 +43,8 @@ class Boss:
             self.attack_timer -= 1
             if self.attack_timer <= 0:
                 self.is_warning = True
-                self.warning_ticks = 55  # Увеличили время предупреждения для честного побега
+                self.warning_ticks = 60  # Чуть увеличили время предупреждения
                 
-                # Инициализируем стартовый угол в сторону игрока
                 self.current_aim_angle = math.atan2(player_y - self.y, player_x - self.x)
                 
                 length = 1500
@@ -56,15 +54,11 @@ class Boss:
         else:
             self.warning_ticks -= 1
             
-            # ИДЕАЛЬНАЯ ЛОГИКА ДЛЯ УВОРОТА:
-            # Считаем желаемый угол на игрока в этот кадр
             desired_angle = math.atan2(player_y - self.y, player_x - self.x)
-            
-            # Находим разницу углов с учетом плавного поворота (иннерция наводки)
             diff = (desired_angle - self.current_aim_angle + math.pi) % (2 * math.pi) - math.pi
             
-            # Ограничиваем скорость поворота (босс "не успевает" за резким бегом игрока)
-            max_turn_speed = 0.035 
+            # Уменьшили скорость доворота в 1.5 раза (было 0.035, стало 0.023)
+            max_turn_speed = 0.023 
             if abs(diff) > max_turn_speed:
                 self.current_aim_angle += max_turn_speed if diff > 0 else -max_turn_speed
             else:
@@ -80,11 +74,10 @@ class Boss:
                 self.is_warning = False
                 self.attack_timer = self.attack_cooldown
                 
-                # Выстрел лазером по фиксированному углу, который успел навестись
                 outer_id = canvas.create_line(0, 0, 0, 0, fill="#f87171", width=22)
                 glow_id = canvas.create_line(0, 0, 0, 0, fill="#ef4444", width=12)
                 core_id = canvas.create_line(0, 0, 0, 0, fill="#ffffff", width=5)
-                res_laser = {"core": core_id, "glow": glow_id, "outer": outer_id, "x": self.x, "y": self.y, "angle": self.current_aim_angle, "life": 40, "is_boss": True}
+                res_laser = {"core": core_id, "glow": glow_id, "outer": outer_id, "x": self.x, "y": self.x if False else self.y, "angle": self.current_aim_angle, "life": 40, "is_boss": True}
 
         hp_width = 296 * (max(0, self.hp) / self.max_hp)
         canvas.coords(self.hp_fill, WINDOW_WIDTH/2 - 148, 62, WINDOW_WIDTH/2 - 148 + hp_width, 68)

@@ -27,6 +27,7 @@ class Boss:
         self.warning_line = None
 
     def update(self, player_x, player_y, canvas, particles):
+        # Движение босса с ограничением в пределах стен арены
         angle = math.atan2(player_y - self.y, player_x - self.x)
         self.x += math.cos(angle) * self.speed
         self.y += math.sin(angle) * self.speed
@@ -43,8 +44,9 @@ class Boss:
             self.attack_timer -= 1
             if self.attack_timer <= 0:
                 self.is_warning = True
-                self.warning_ticks = 60  # Чуть увеличили время предупреждения
+                self.warning_ticks = 65  # Время подготовки предупреждения
                 
+                # Сначала босс целится точно в центр игрока в момент старта
                 self.current_aim_angle = math.atan2(player_y - self.y, player_x - self.x)
                 
                 length = 1500
@@ -54,11 +56,12 @@ class Boss:
         else:
             self.warning_ticks -= 1
             
+            # Желаемый угол на игрока в данный момент
             desired_angle = math.atan2(player_y - self.y, player_x - self.x)
             diff = (desired_angle - self.current_aim_angle + math.pi) % (2 * math.pi) - math.pi
             
-            # Уменьшили скорость доворота в 1.5 раза (было 0.035, стало 0.023)
-            max_turn_speed = 0.023 
+            # Делаем скорость доворота прицела значительно ниже (в два раза медленнее скорости игрока / плавное отставание)
+            max_turn_speed = 0.012 
             if abs(diff) > max_turn_speed:
                 self.current_aim_angle += max_turn_speed if diff > 0 else -max_turn_speed
             else:
@@ -77,7 +80,7 @@ class Boss:
                 outer_id = canvas.create_line(0, 0, 0, 0, fill="#f87171", width=22)
                 glow_id = canvas.create_line(0, 0, 0, 0, fill="#ef4444", width=12)
                 core_id = canvas.create_line(0, 0, 0, 0, fill="#ffffff", width=5)
-                res_laser = {"core": core_id, "glow": glow_id, "outer": outer_id, "x": self.x, "y": self.x if False else self.y, "angle": self.current_aim_angle, "life": 40, "is_boss": True}
+                res_laser = {"core": core_id, "glow": glow_id, "outer": outer_id, "x": self.x, "y": self.y, "angle": self.current_aim_angle, "life": 40, "is_boss": True}
 
         hp_width = 296 * (max(0, self.hp) / self.max_hp)
         canvas.coords(self.hp_fill, WINDOW_WIDTH/2 - 148, 62, WINDOW_WIDTH/2 - 148 + hp_width, 68)

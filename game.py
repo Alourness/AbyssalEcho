@@ -17,17 +17,14 @@ class GameLevel:
         self.setup_level()
 
     def setup_level(self):
-        # 1. Жестко глушим любые старые таймеры
         self.stop()
         
-        # 2. Полностью сбрасываем все списки и сущности
         self.enemies = []
         self.flying_lasers = []
         self.particles = []
         self.trails = []
         self.boss = None
         
-        # 3. Чистим холст
         self.canvas.delete("all")
         self.draw_stone_arena()
         
@@ -43,7 +40,6 @@ class GameLevel:
         self.laser_bar_bg = self.canvas.create_rectangle(435, 18, 555, 24, fill="#1c1c28", outline="#3a3a4f")
         self.laser_bar_fill = self.canvas.create_rectangle(436, 19, 554, 23, fill="#a855f7", outline="")
         
-        # 4. Создаем игрока в центре
         self.player = Player(self.canvas)
         self.player.x = WINDOW_WIDTH / 2
         self.player.y = (WINDOW_HEIGHT + 50) / 2
@@ -91,7 +87,6 @@ class GameLevel:
         self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 110, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 - 10, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
         self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 45, text="RESTART", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
         
-        # Динамическая надпись на кнопке: если уровень меньше 3 — пишем NEXT, иначе MENU
         btn_label = "NEXT" if self.level < 3 else "MENU"
         self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
         self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 45, text=btn_label, fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
@@ -138,10 +133,10 @@ class GameLevel:
             return
 
         side = random.choice(["top", "bottom", "left", "right"])
-        if side == "top": x, y = random.randint(30, WINDOW_WIDTH-30), 80
-        elif side == "bottom": x, y = random.randint(30, WINDOW_WIDTH-30), WINDOW_HEIGHT-30
-        elif side == "left": x, y = 30, random.randint(80, WINDOW_HEIGHT-30)
-        else: x, y = WINDOW_WIDTH-30, random.randint(80, WINDOW_HEIGHT-30)
+        if side == "top": x, y = random.randint(35, WINDOW_WIDTH-35), 85
+        elif side == "bottom": x, y = random.randint(35, WINDOW_WIDTH-35), WINDOW_HEIGHT-35
+        elif side == "left": x, y = 35, random.randint(85, WINDOW_HEIGHT-35)
+        else: x, y = WINDOW_WIDTH-35, random.randint(85, WINDOW_HEIGHT-35)
         
         en = Enemy(self.canvas, x, y)
         self.enemies.append(en)
@@ -150,12 +145,11 @@ class GameLevel:
     def handle_click(self, x, y):
         if self.is_victory:
             if WINDOW_WIDTH/2 - 110 <= x <= WINDOW_WIDTH/2 - 10 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
-                self.setup_level() # Рестарт текущего уровня
+                self.setup_level()
             elif WINDOW_WIDTH/2 + 10 <= x <= WINDOW_WIDTH/2 + 110 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
-                # Кнопка NEXT / MENU
                 if self.level < 3:
-                    self.level += 1      # Переходим на следующий уровень
-                    self.setup_level()   # Перезапускаем арену под новый уровень в том же инстансе!
+                    self.level += 1
+                    self.setup_level()
                 else:
                     self.stop()
                     self.on_return_menu()
@@ -246,8 +240,8 @@ class GameLevel:
                     p_id = self.canvas.create_oval(self.player.x-3, self.player.y-3, self.player.x+3, self.player.y+3, fill="#d8b4fe", outline="")
                     self.particles.append({"x": self.player.x, "y": self.player.y, "dx": random.uniform(-1.5, 1.5), "dy": random.uniform(-1.5, 1.5), "life": 14, "color": "#c084fc", "id": p_id})
             
-            self.player.x = max(self.player.size+15, min(WINDOW_WIDTH-self.player.size-15, self.player.x))
-            self.player.y = max(65+self.player.size+15, min(WINDOW_HEIGHT-self.player.size-15, self.player.y))
+            self.player.x = max(self.player.size+20, min(WINDOW_WIDTH-self.player.size-20, self.player.x))
+            self.player.y = max(65+self.player.size+20, min(WINDOW_HEIGHT-self.player.size-20, self.player.y))
             
             self.player.update_coords(self.anim_tick)
             
@@ -387,6 +381,12 @@ class GameLevel:
                 if not e_coords: continue
                 ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
                 
+                # Жёстко ограничиваем врагов границами стен арены (от 20 до WINDOW_WIDTH-20 и от 70 до WINDOW_HEIGHT-20)
+                if ex < 25 or ex > WINDOW_WIDTH - 25 or ey < 70 or ey > WINDOW_HEIGHT - 25:
+                    enemy.delete()
+                    self.enemies.remove(enemy)
+                    continue
+
                 e_pulse = math.sin(self.anim_tick * 0.2 + enemy.offset) * 2
                 self.canvas.coords(enemy.outer, ex-11-e_pulse, ey-11-e_pulse, ex+11+e_pulse, ey+11+e_pulse)
                 
@@ -410,6 +410,7 @@ class GameLevel:
                 base_angle = math.atan2(self.player.y-ey, self.player.x-ex)
                 
                 if enemy.mode == "flank": angle = base_angle + math.sin(self.spawn_counter*0.06 + enemy.offset)*1.4
+                elif enemy.path if hasattr(enemy, 'path') else False: pass
                 elif enemy.mode == "rush": angle = base_angle
                 elif enemy.mode == "retreat" and dist < 150: angle = base_angle + math.pi
                 elif enemy.mode == "circle": angle = base_angle + math.pi/2

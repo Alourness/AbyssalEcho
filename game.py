@@ -17,17 +17,17 @@ class GameLevel:
         self.setup_level()
 
     def setup_level(self):
-        # 1. Жестко глушим любой старый поток
+        # 1. Жестко глушим любые старые таймеры
         self.stop()
         
-        # 2. Полностью очищаем списки сущностей, чтобы старые объекты не висели в памяти
+        # 2. Полностью сбрасываем все списки и сущности
         self.enemies = []
         self.flying_lasers = []
         self.particles = []
         self.trails = []
         self.boss = None
         
-        # 3. Чистим весь холст
+        # 3. Чистим холст
         self.canvas.delete("all")
         self.draw_stone_arena()
         
@@ -43,7 +43,7 @@ class GameLevel:
         self.laser_bar_bg = self.canvas.create_rectangle(435, 18, 555, 24, fill="#1c1c28", outline="#3a3a4f")
         self.laser_bar_fill = self.canvas.create_rectangle(436, 19, 554, 23, fill="#a855f7", outline="")
         
-        # 4. Создаем нового игрока
+        # 4. Создаем игрока в центре
         self.player = Player(self.canvas)
         self.player.x = WINDOW_WIDTH / 2
         self.player.y = (WINDOW_HEIGHT + 50) / 2
@@ -91,8 +91,10 @@ class GameLevel:
         self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 110, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 - 10, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
         self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 45, text="RESTART", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
         
+        # Динамическая надпись на кнопке: если уровень меньше 3 — пишем NEXT, иначе MENU
+        btn_label = "NEXT" if self.level < 3 else "MENU"
         self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
-        self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 45, text="NEXT" if self.level < 3 else "MENU", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
+        self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 45, text=btn_label, fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
 
         for _ in range(5): 
             self.spawn_enemy()
@@ -148,13 +150,14 @@ class GameLevel:
     def handle_click(self, x, y):
         if self.is_victory:
             if WINDOW_WIDTH/2 - 110 <= x <= WINDOW_WIDTH/2 - 10 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
-                self.setup_level()
+                self.setup_level() # Рестарт текущего уровня
             elif WINDOW_WIDTH/2 + 10 <= x <= WINDOW_WIDTH/2 + 110 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
-                self.stop()
+                # Кнопка NEXT / MENU
                 if self.level < 3:
-                    from game import GameLevel
-                    GameLevel(self.root, self.canvas, self.level + 1, self.on_return_menu)
+                    self.level += 1      # Переходим на следующий уровень
+                    self.setup_level()   # Перезапускаем арену под новый уровень в том же инстансе!
                 else:
+                    self.stop()
                     self.on_return_menu()
         elif self.is_game_over:
             if WINDOW_WIDTH/2 - 60 <= x <= WINDOW_WIDTH/2 + 60 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:

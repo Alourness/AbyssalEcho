@@ -15,6 +15,9 @@ class GameLevel:
         self.is_running = False
         
         self.setup_level()
+        
+        # Биндим клавишу Escape для паузы
+        self.root.bind("<Escape>", self.toggle_pause)
 
     def setup_level(self):
         self.stop()
@@ -76,7 +79,14 @@ class GameLevel:
         self.aim_line = self.canvas.create_line(0, 0, 0, 0, fill="#a855f7", dash=(3, 3), width=1)
         self.crosshair = self.canvas.create_oval(0, 0, 0, 0, outline="#e879f9", width=1.5)
         
-        self.pause_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, text="PAUSED", fill="#ffffff", font=("Consolas", 40, "bold"), anchor="center", state="hidden")
+        # Элементы экрана паузы
+        self.pause_overlay = self.canvas.create_rectangle(0, 50, WINDOW_WIDTH, WINDOW_HEIGHT, fill="#050508", stipple="gray50", outline="", state="hidden")
+        self.pause_box = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 150, WINDOW_HEIGHT/2 - 90, WINDOW_WIDTH/2 + 150, WINDOW_HEIGHT/2 + 90, fill="#0f0f1a", outline="#c084fc", width=2, state="hidden")
+        self.pause_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 45, text="PAUSED", fill="#f3e8ff", font=("Consolas", 24, "bold"), anchor="center", state="hidden")
+        
+        # Кнопка MENU в паузе
+        self.pause_menu_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 110, WINDOW_HEIGHT/2 + 10, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 60, fill="#1e1b4b", outline="#e879f9", width=2, state="hidden")
+        self.pause_menu_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 + 35, text="MENU", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
         
         self.victory_shadow = self.canvas.create_text(WINDOW_WIDTH/2 + 3, WINDOW_HEIGHT/2 - 47, text="VICTORY", fill="#022c22", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
         self.victory_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 50, text="VICTORY", fill="#4ade80", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
@@ -91,7 +101,6 @@ class GameLevel:
         self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
         self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 45, text=btn_label, fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
 
-        # СОЗДАЕМ ОБУЧАЮЩЕЕ ОКНО ДЛЯ ПЕРВОГО УРОВНЯ
         self.tutorial_elements = []
         self.is_tutorial_open = False
         if self.level == 1:
@@ -104,26 +113,27 @@ class GameLevel:
         self.is_running = True
         self.update_game()
 
+    def toggle_pause(self, event=None):
+        if self.is_tutorial_open or self.is_game_over or self.is_victory: return
+        self.is_paused = not self.is_paused
+        
+        state = "normal" if self.is_paused else "hidden"
+        self.canvas.itemconfig(self.pause_overlay, state=state)
+        self.canvas.itemconfig(self.pause_box, state=state)
+        self.canvas.itemconfig(self.pause_text, state=state)
+        self.canvas.itemconfig(self.pause_menu_btn, state=state)
+        self.canvas.itemconfig(self.pause_menu_text, state=state)
+
     def show_tutorial_overlay(self):
-        # Затемнение экрана
         bg_shadow = self.canvas.create_rectangle(0, 50, WINDOW_WIDTH, WINDOW_HEIGHT, fill="#050508", stipple="gray50", outline="")
-        
-        # Плашка окна инструкции
         box = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 280, 140, WINDOW_WIDTH/2 + 280, 560, fill="#0f0f1a", outline="#c084fc", width=2)
-        
-        # Заголовок
         title = self.canvas.create_text(WINDOW_WIDTH/2, 175, text="FLIGHT MANUAL", fill="#f3e8ff", font=("Consolas", 20, "bold"), anchor="center")
-        
-        # Пункты инструкции
         t1 = self.canvas.create_text(WINDOW_WIDTH/2 - 250, 230, text="• CURSOR: Direction vector for movement.", fill="#d8b4fe", font=("Consolas", 11), anchor="w")
         t2 = self.canvas.create_text(WINDOW_WIDTH/2 - 250, 275, text="• DISTANCE: Far = Fast movement  |  Near = Slow movement", fill="#a855f7", font=("Consolas", 10), anchor="w")
         t3 = self.canvas.create_text(WINDOW_WIDTH/2 - 250, 320, text="• RIGHT CLICK: Fire guided plasma laser.", fill="#d8b4fe", font=("Consolas", 11), anchor="w")
         t4 = self.canvas.create_text(WINDOW_WIDTH/2 - 250, 365, text="• SPACEBAR: Activate ramming shield aura.", fill="#ff69b4", font=("Consolas", 11), anchor="w")
-        
-        # Кнопка "GOT IT"
         btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 80, 470, WINDOW_WIDTH/2 + 80, 520, fill="#1e1b4b", outline="#e879f9", width=2)
         btn_txt = self.canvas.create_text(WINDOW_WIDTH/2, 495, text="GOT IT", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center")
-        
         self.tutorial_elements = [bg_shadow, box, title, t1, t2, t3, t4, btn, btn_txt]
 
     def draw_stone_arena(self):
@@ -172,13 +182,19 @@ class GameLevel:
         self.enemies_remaining -= 1
 
     def handle_click(self, x, y):
-        # Если открыто обучающее окно первого уровня, обрабатываем кнопку GOT IT
         if self.is_tutorial_open:
             if WINDOW_WIDTH/2 - 80 <= x <= WINDOW_WIDTH/2 + 80 and 470 <= y <= 520:
                 for el in self.tutorial_elements:
                     self.canvas.delete(el)
                 self.tutorial_elements = []
                 self.is_tutorial_open = False
+            return
+
+        if self.is_paused:
+            # Проверяем клик по кнопке MENU на паузе
+            if WINDOW_WIDTH/2 - 110 <= x <= WINDOW_WIDTH/2 + 110 and WINDOW_HEIGHT/2 + 10 <= y <= WINDOW_HEIGHT/2 + 60:
+                self.stop()
+                self.on_return_menu()
             return
 
         if self.is_victory:
@@ -196,7 +212,7 @@ class GameLevel:
                 self.setup_level()
 
     def on_right_press(self, event):
-        if self.is_tutorial_open or not self.is_running or self.is_paused or self.is_game_over or self.is_victory: return
+        if self.is_tutorial_open or self.is_paused or not self.is_running or self.is_game_over or self.is_victory: return
         if self.mouse_y <= 65 or self.laser_stamina <= 0 or self.laser_exhausted or self.active_laser: return
         self.right_clicked = True
         target_angle = math.atan2(self.mouse_y - self.player.y, self.mouse_x - self.player.x)
@@ -223,12 +239,11 @@ class GameLevel:
     def update_game(self):
         if not self.is_running: return
 
-        # Если открыт туториал первого уровня, игра заморожена
-        if self.is_tutorial_open:
+        if self.is_tutorial_open or self.is_paused:
             self.loop_id = self.root.after(16, self.update_game)
             return
 
-        if not self.is_paused and not self.is_game_over and not self.is_victory:
+        if not self.is_game_over and not self.is_victory:
             self.anim_tick += 1
             
             if len(self.enemies) == 0 and not self.boss and self.enemies_remaining > 0:

@@ -3,6 +3,7 @@ import math
 import random
 from config import *
 from entities import Player, Enemy
+from boss import Boss
 
 class GameLevel:
     def __init__(self, root, canvas, level, on_return_menu):
@@ -32,8 +33,10 @@ class GameLevel:
         self.laser_bar_fill = self.canvas.create_rectangle(436, 19, 554, 23, fill="#a855f7", outline="")
         
         self.player = Player(self.canvas)
-        self.lives = 3
+        self.player.x = WINDOW_WIDTH / 2
+        self.player.y = (WINDOW_HEIGHT + 50) / 2
         
+        self.lives = 3
         self.ram_stamina = 100.0
         self.space_pressed = False
         self.is_ramming = False
@@ -46,37 +49,50 @@ class GameLevel:
         self.active_laser = None
         self.laser_angle = 0.0
         
-        self.max_enemies = 10 + (self.level * 5)
+        # Настройка врагов в зависимости от уровня
+        if self.level == 2:
+            self.max_enemies = 40
+        else:
+            self.max_enemies = 15
+            
         self.enemies_remaining = self.max_enemies
         self.spawn_counter = 0
         self.anim_tick = 0
+        
         self.is_paused = False
         self.is_game_over = False
         self.is_victory = False
+        self.boss = None
         
         self.enemies = []
         self.flying_lasers = []
         self.particles = []
         self.trails = []
         
-        self.mouse_x = 450
-        self.mouse_y = 375
+        self.mouse_x = WINDOW_WIDTH / 2
+        self.mouse_y = (WINDOW_HEIGHT + 50) / 2
         
         self.aim_line = self.canvas.create_line(0, 0, 0, 0, fill="#a855f7", dash=(3, 3), width=1)
         self.crosshair = self.canvas.create_oval(0, 0, 0, 0, outline="#e879f9", width=1.5)
         
-        self.pause_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, text="PAUSED", fill="#ffffff", font=("Consolas", 36, "bold"), anchor="center", state="hidden")
+        self.pause_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, text="PAUSED", fill="#ffffff", font=("Consolas", 40, "bold"), anchor="center", state="hidden")
         
-        self.victory_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 40, text="VICTORY!", fill="#4ade80", font=("Consolas", 36, "bold"), anchor="center", state="hidden")
-        self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 110, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 - 10, WINDOW_HEIGHT/2 + 60, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
-        self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 40, text="RESTART", fill="#f3e8ff", font=("Consolas", 11, "bold"), anchor="center", state="hidden")
+        self.victory_shadow = self.canvas.create_text(WINDOW_WIDTH/2 + 3, WINDOW_HEIGHT/2 - 47, text="VICTORY", fill="#022c22", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
+        self.victory_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 50, text="VICTORY", fill="#4ade80", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
         
-        self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 60, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
-        self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 40, text="MENU", fill="#f3e8ff", font=("Consolas", 11, "bold"), anchor="center", state="hidden")
+        self.gameover_shadow = self.canvas.create_text(WINDOW_WIDTH/2 + 3, WINDOW_HEIGHT/2 - 47, text="GAME OVER", fill="#450a0a", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
+        self.gameover_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 50, text="GAME OVER", fill="#ef4444", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
 
-        self.gameover_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 20, text="GAME OVER", fill="#ef4444", font=("Consolas", 36, "bold"), anchor="center", state="hidden")
+        self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 110, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 - 10, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
+        self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 45, text="RESTART", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
+        
+        self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
+        self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 45, text="NEXT" if self.level < 3 else "MENU", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
 
-        for _ in range(5): self.spawn_enemy()
+        # Сразу спавним первых врагов при старте уровня
+        for _ in range(5): 
+            self.spawn_enemy()
+
         if self.loop_id:
             self.root.after_cancel(self.loop_id)
         self.update_game()
@@ -109,6 +125,13 @@ class GameLevel:
 
     def spawn_enemy(self):
         if self.enemies_remaining <= 0: return
+        
+        # На 2 уровне последний враг — это босс
+        if self.level == 2 and self.enemies_remaining == 1 and not self.boss:
+            self.boss = Boss(self.canvas, WINDOW_WIDTH / 2, 120)
+            self.enemies_remaining -= 1
+            return
+
         side = random.choice(["top", "bottom", "left", "right"])
         if side == "top": x, y = random.randint(30, WINDOW_WIDTH-30), 80
         elif side == "bottom": x, y = random.randint(30, WINDOW_WIDTH-30), WINDOW_HEIGHT-30
@@ -121,13 +144,17 @@ class GameLevel:
 
     def handle_click(self, x, y):
         if self.is_victory:
-            if WINDOW_WIDTH/2 - 110 <= x <= WINDOW_WIDTH/2 - 10 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 60:
+            if WINDOW_WIDTH/2 - 110 <= x <= WINDOW_WIDTH/2 - 10 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
                 self.setup_level()
-            elif WINDOW_WIDTH/2 + 10 <= x <= WINDOW_WIDTH/2 + 110 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 60:
+            elif WINDOW_WIDTH/2 + 10 <= x <= WINDOW_WIDTH/2 + 110 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
                 self.stop()
-                self.on_return_menu()
+                if self.level < 3:
+                    from game import GameLevel
+                    GameLevel(self.root, self.canvas, self.level + 1, self.on_return_menu)
+                else:
+                    self.on_return_menu()
         elif self.is_game_over:
-            if WINDOW_WIDTH/2 - 60 <= x <= WINDOW_WIDTH/2 + 60 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 60:
+            if WINDOW_WIDTH/2 - 60 <= x <= WINDOW_WIDTH/2 + 60 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
                 self.setup_level()
 
     def on_right_press(self, event):
@@ -161,7 +188,7 @@ class GameLevel:
         if not self.is_paused and not self.is_game_over and not self.is_victory:
             self.anim_tick += 1
             
-            if len(self.enemies) == 0 and self.enemies_remaining > 0:
+            if len(self.enemies) == 0 and not self.boss and self.enemies_remaining > 0:
                 for _ in range(min(5, self.enemies_remaining)):
                     self.spawn_enemy()
                 self.spawn_counter = 0
@@ -242,6 +269,18 @@ class GameLevel:
                 self.canvas.coords(self.active_laser["glow"], self.player.x, self.player.y, lx2, ly2)
                 self.canvas.coords(self.active_laser["core"], self.player.x, self.player.y, lx2, ly2)
                 
+                if self.boss:
+                    bx, by = self.boss.x, self.boss.y
+                    v1x, v1y = bx - self.player.x, by - self.player.y
+                    dirx, diry = math.cos(self.laser_angle), math.sin(self.laser_angle)
+                    proj = v1x * dirx + v1y * diry
+                    if 0 <= proj <= length:
+                        cx = self.player.x + dirx * proj
+                        cy = self.player.y + diry * proj
+                        if math.hypot(bx - cx, by - cy) < 35:
+                            if self.boss.take_damage(0.4, self.canvas, self.particles):
+                                self.boss = None
+
                 for enemy in self.enemies[:]:
                     e_coords = self.canvas.coords(enemy.body)
                     if not e_coords: continue
@@ -258,6 +297,27 @@ class GameLevel:
                             for _ in range(10):
                                 self.particles.append({"x": ex, "y": ey, "dx": random.uniform(-5, 5), "dy": random.uniform(-5, 5), "life": 12, "color": "#ff00ff", "id": self.canvas.create_rectangle(ex-2, ey-2, ex+2, ey+2, fill="#ffa07a", outline="")})
 
+            if self.boss:
+                new_boss_laser = self.boss.update(self.player.x, self.player.y, self.canvas, self.particles)
+                if new_boss_laser:
+                    self.flying_lasers.append(new_boss_laser)
+                
+                if math.hypot(self.player.x - self.boss.x, self.player.y - self.boss.y) < (self.player.size + 30):
+                    self.lives -= 1
+                    flash = self.canvas.create_rectangle(0, 50, WINDOW_WIDTH, WINDOW_HEIGHT, fill="#ef4444", outline="")
+                    self.root.after(40, lambda: self.canvas.delete(flash))
+                    if self.lives <= 0:
+                        self.is_game_over = True
+                        self.canvas.tag_raise(self.gameover_shadow)
+                        self.canvas.tag_raise(self.gameover_text)
+                        self.canvas.tag_raise(self.restart_btn)
+                        self.canvas.tag_raise(self.restart_text)
+                        self.canvas.itemconfig(self.gameover_shadow, state="normal")
+                        self.canvas.itemconfig(self.gameover_text, state="normal")
+                        self.canvas.itemconfig(self.restart_btn, state="normal")
+                        self.canvas.itemconfig(self.restart_text, state="normal")
+                        return
+
             for fl in self.flying_lasers[:]:
                 fl["life"] -= 1
                 if fl["life"] <= 0:
@@ -267,33 +327,51 @@ class GameLevel:
                     self.flying_lasers.remove(fl)
                     continue
                 
-                fl["x"] += fl["dx"]
-                fl["y"] += fl["dy"]
-                
-                length = 1500
-                angle = math.atan2(fl["dy"], fl["dx"])
-                lx2 = fl["x"] + math.cos(angle) * length
-                ly2 = fl["y"] + math.sin(angle) * length
-                
-                self.canvas.coords(fl["outer"], fl["x"], fl["y"], lx2, ly2)
-                self.canvas.coords(fl["glow"], fl["x"], fl["y"], lx2, ly2)
-                self.canvas.coords(fl["core"], fl["x"], fl["y"], lx2, ly2)
-                
-                for enemy in self.enemies[:]:
-                    e_coords = self.canvas.coords(enemy.body)
-                    if not e_coords: continue
-                    ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
-                    v1x, v1y = ex - fl["x"], ey - fl["y"]
+                if fl.get("is_boss"):
+                    length = 1500
+                    angle = fl["angle"]
+                    lx2 = fl["x"] + math.cos(angle) * length
+                    ly2 = fl["y"] + math.sin(angle) * length
+                    self.canvas.coords(fl["outer"], fl["x"], fl["y"], lx2, ly2)
+                    self.canvas.coords(fl["glow"], fl["x"], fl["y"], lx2, ly2)
+                    self.canvas.coords(fl["core"], fl["x"], fl["y"], lx2, ly2)
+                    
+                    v1x, v1y = self.player.x - fl["x"], self.player.y - fl["y"]
                     dirx, diry = math.cos(angle), math.sin(angle)
                     proj = v1x * dirx + v1y * diry
                     if 0 <= proj <= length:
                         cx = fl["x"] + dirx * proj
                         cy = fl["y"] + diry * proj
-                        if math.hypot(ex - cx, ey - cy) < 16:
-                            enemy.delete()
-                            self.enemies.remove(enemy)
-                            for _ in range(10):
-                                self.particles.append({"x": ex, "y": ey, "dx": random.uniform(-5, 5), "dy": random.uniform(-5, 5), "life": 12, "color": "#ff00ff", "id": self.canvas.create_rectangle(ex-2, ey-2, ex+2, ey+2, fill="#ffa07a", outline="")})
+                        if math.hypot(self.player.x - cx, self.player.y - cy) < (self.player.size + 8):
+                            self.lives -= 1
+                            self.flying_lasers.remove(fl)
+                            self.canvas.delete(fl["core"])
+                            self.canvas.delete(fl["glow"])
+                            self.canvas.delete(fl["outer"])
+                            flash = self.canvas.create_rectangle(0, 50, WINDOW_WIDTH, WINDOW_HEIGHT, fill="#ef4444", outline="")
+                            self.root.after(40, lambda: self.canvas.delete(flash))
+                            if self.lives <= 0:
+                                self.is_game_over = True
+                                self.canvas.tag_raise(self.gameover_shadow)
+                                self.canvas.tag_raise(self.gameover_text)
+                                self.canvas.tag_raise(self.restart_btn)
+                                self.canvas.tag_raise(self.restart_text)
+                                self.canvas.itemconfig(self.gameover_shadow, state="normal")
+                                self.canvas.itemconfig(self.gameover_text, state="normal")
+                                self.canvas.itemconfig(self.restart_btn, state="normal")
+                                self.canvas.itemconfig(self.restart_text, state="normal")
+                                return
+                            break
+                else:
+                    fl["x"] += fl["dx"]
+                    fl["y"] += fl["dy"]
+                    length = 1500
+                    angle = math.atan2(fl["dy"], fl["dx"])
+                    lx2 = fl["x"] + math.cos(angle) * length
+                    ly2 = fl["y"] + math.sin(angle) * length
+                    self.canvas.coords(fl["outer"], fl["x"], fl["y"], lx2, ly2)
+                    self.canvas.coords(fl["glow"], fl["x"], fl["y"], lx2, ly2)
+                    self.canvas.coords(fl["core"], fl["x"], fl["y"], lx2, ly2)
 
             self.canvas.coords(self.aim_line, self.player.x, self.player.y, self.mouse_x, self.mouse_y)
             self.canvas.coords(self.crosshair, self.mouse_x-8, self.mouse_y-8, self.mouse_x+8, self.mouse_y+8)
@@ -341,19 +419,6 @@ class GameLevel:
                 e_trail = self.canvas.create_rectangle(ex-9, ey-9, ex+9, ey+9, fill="", outline="#991b1b", width=1)
                 self.trails.append({"id": e_trail, "life": 3})
 
-                if ey <= 65:
-                    self.canvas.coords(enemy.body, ex-9, 67, ex+9, 85)
-                    self.canvas.coords(enemy.core, ex-4, 72, ex+4, 80)
-                if ey >= WINDOW_HEIGHT-15:
-                    self.canvas.coords(enemy.body, ex-9, WINDOW_HEIGHT-35, ex+9, WINDOW_HEIGHT-17)
-                    self.canvas.coords(enemy.core, ex-4, WINDOW_HEIGHT-30, ex+4, WINDOW_HEIGHT-22)
-                if ex <= 15:
-                    self.canvas.coords(enemy.body, 17, ey-9, 35, ey+9)
-                    self.canvas.coords(enemy.core, 22, ey-4, 30, ey+4)
-                if ex >= WINDOW_WIDTH-15:
-                    self.canvas.coords(enemy.body, WINDOW_WIDTH-35, ey-9, WINDOW_WIDTH-17, ey+9)
-                    self.canvas.coords(enemy.core, WINDOW_WIDTH-30, ey-4, WINDOW_WIDTH-22, ey+4)
-
                 if dist < (self.player.size + 9):
                     self.lives -= 1
                     enemy.delete()
@@ -362,9 +427,15 @@ class GameLevel:
                     self.root.after(40, lambda: self.canvas.delete(flash))
                     if self.lives <= 0:
                         self.is_game_over = True
+                        self.canvas.tag_raise(self.gameover_shadow)
+                        self.canvas.tag_raise(self.gameover_text)
+                        self.canvas.tag_raise(self.restart_btn)
+                        self.canvas.tag_raise(self.restart_text)
+                        
+                        self.canvas.itemconfig(self.gameover_shadow, state="normal")
                         self.canvas.itemconfig(self.gameover_text, state="normal")
-                        self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 60, fill="#1e1b4b", outline="#ef4444", width=2)
-                        self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 + 40, text="RESTART", fill="#f3e8ff", font=("Consolas", 11, "bold"), anchor="center")
+                        self.canvas.itemconfig(self.restart_btn, state="normal")
+                        self.canvas.itemconfig(self.restart_text, state="normal")
                         return
                     break
 
@@ -381,8 +452,16 @@ class GameLevel:
                     self.canvas.delete(part["id"])
                     self.particles.remove(part)
 
-            if not self.enemies and self.enemies_remaining <= 0:
+            if not self.enemies and self.enemies_remaining <= 0 and not self.boss:
                 self.is_victory = True
+                self.canvas.tag_raise(self.victory_shadow)
+                self.canvas.tag_raise(self.victory_text)
+                self.canvas.tag_raise(self.restart_btn)
+                self.canvas.tag_raise(self.restart_text)
+                self.canvas.tag_raise(self.next_btn)
+                self.canvas.tag_raise(self.next_text)
+                
+                self.canvas.itemconfig(self.victory_shadow, state="normal")
                 self.canvas.itemconfig(self.victory_text, state="normal")
                 self.canvas.itemconfig(self.restart_btn, state="normal")
                 self.canvas.itemconfig(self.restart_text, state="normal")

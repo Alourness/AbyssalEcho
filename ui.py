@@ -15,7 +15,7 @@ class MainMenu:
         
         for i in range(1, 4):
             btn_y = 220 + (i - 1) * 90
-            is_unlocked = (i == 1)  # Только 1 уровень доступен
+            is_unlocked = (i <= 2)  # Уровни 1 и 2 доступны для выбора
             
             fill_col = "#12121c" if is_unlocked else "#0a0a0f"
             outline_col = "#a855f7" if is_unlocked else "#2a1b38"

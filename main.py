@@ -1,28 +1,25 @@
 import tkinter as tk
 import math
 import random
+from config import *
+from entities import Player, Enemy
 
 class Game:
     def __init__(self, root):
         self.root = root
         self.root.title("2D Plasma Top-Down Game - Level 1")
-        self.root.geometry("900x700")
+        self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.root.resizable(False, False)
         
-        self.canvas = tk.Canvas(root, width=900, height=700, bg="#050508", highlightthickness=0)
+        self.canvas = tk.Canvas(root, width=WINDOW_WIDTH, height=WINDOW_HEIGHT, bg=BG_COLOR, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         
-        self.draw_environment()
+        self.draw_stone_arena()
         
-        self.canvas.create_rectangle(0, 0, 900, 50, fill="#0d0d14", outline="#1a1a2e", width=2)
+        self.canvas.create_rectangle(0, 0, WINDOW_WIDTH, 50, fill=UI_BG_COLOR, outline="#2a2a38", width=2)
         self.ui_text = self.canvas.create_text(20, 25, anchor="w", fill="#d8b4fe", font=("Consolas", 10, "bold"), text="")
         
-        self.player_x = 450
-        self.player_y = 375
-        self.player_size = 16
-        self.player_id = self.canvas.create_polygon(self.player_x, self.player_y-self.player_size, self.player_x+self.player_size, self.player_y, self.player_x, self.player_y+self.player_size, self.player_x-self.player_size, self.player_y, fill="#c084fc", outline="#f3e8ff", width=2)
-        
-        self.max_speed = 5.0
+        self.player = Player(self.canvas)
         self.lives = 3
         
         self.ram_stamina = 100.0
@@ -37,8 +34,9 @@ class Game:
         self.active_laser = None
         self.laser_angle = 0.0
         
-        self.enemies_remaining = 25
+        self.enemies_remaining = MAX_ENEMIES_TOTAL
         self.spawn_counter = 0
+        self.anim_tick = 0
         
         self.enemies = []
         self.flying_lasers = []
@@ -60,28 +58,32 @@ class Game:
         for _ in range(5): self.spawn_enemy()
         self.update_game()
 
-    def draw_environment(self):
-        for x in range(0, 900, 60):
-            self.canvas.create_line(x, 50, x, 700, fill="#0a0a10", width=1)
-        for y in range(50, 700, 60):
-            self.canvas.create_line(0, y, 900, y, fill="#0a0a10", width=1)
-            
-        self.canvas.create_rectangle(8, 58, 892, 692, outline="#3b0764", width=3)
-        self.canvas.create_rectangle(12, 62, 888, 688, outline="#1e1b4b", width=1)
-        
-        for _ in range(40):
-            x, y = random.randint(30, 870), random.randint(75, 675)
-            sz = random.randint(2, 5)
-            self.canvas.create_polygon(x, y-sz, x+sz, y, x, y+sz, x-sz, y, fill="#131324", outline="#2b1055", width=1)
+    def draw_stone_arena(self):
+        for x in range(0, WINDOW_WIDTH, 50):
+            for y in range(50, WINDOW_HEIGHT, 50):
+                c = random.choice(["#07070a", "#09090f", "#0b0b12"])
+                self.canvas.create_rectangle(x, y, x+50, y+50, fill=c, outline="#12121a", width=1)
+                
+        for _ in range(50):
+            x, y = random.randint(30, WINDOW_WIDTH-30), random.randint(75, WINDOW_HEIGHT-25)
+            sz = random.randint(3, 8)
+            self.canvas.create_polygon(x, y-sz, x+sz*0.8, y+sz, x-sz*0.8, y+sz*0.6, fill="#181824", outline="#252538", width=1)
+
+        for x in range(0, WINDOW_WIDTH, 30):
+            self.canvas.create_rectangle(x, 50, x+30, 65, fill="#242430", outline="#111118", width=2)
+            self.canvas.create_rectangle(x, WINDOW_HEIGHT-15, x+30, WINDOW_HEIGHT, fill="#242430", outline="#111118", width=2)
+        for y in range(50, WINDOW_HEIGHT, 30):
+            self.canvas.create_rectangle(0, y, 15, y+30, fill="#242430", outline="#111118", width=2)
+            self.canvas.create_rectangle(WINDOW_WIDTH-15, y, WINDOW_WIDTH, y+30, fill="#242430", outline="#111118", width=2)
 
     def on_mouse_move(self, event):
-        self.mouse_x = max(0, min(900, event.x))
-        self.mouse_y = max(50, min(700, event.y))
+        self.mouse_x = max(15, min(WINDOW_WIDTH-15, event.x))
+        self.mouse_y = max(65, min(WINDOW_HEIGHT-15, event.y))
 
     def on_right_press(self, event):
-        if self.mouse_y <= 50 or self.laser_stamina <= 0 or self.laser_exhausted or self.active_laser: return
+        if self.mouse_y <= 65 or self.laser_stamina <= 0 or self.laser_exhausted or self.active_laser: return
         self.right_clicked = True
-        target_angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
+        target_angle = math.atan2(self.mouse_y - self.player.y, self.mouse_x - self.player.x)
         self.laser_angle = target_angle
         
         core_id = self.canvas.create_line(0, 0, 0, 0, fill="#ffffff", width=4)
@@ -99,21 +101,24 @@ class Game:
             
             dx = math.cos(self.laser_angle) * 22
             dy = math.sin(self.laser_angle) * 22
-            self.flying_lasers.append({"core": core_id, "glow": glow_id, "outer": outer_id, "x": self.player_x, "y": self.player_y, "dx": dx, "dy": dy, "life": 90})
+            self.flying_lasers.append({"core": core_id, "glow": glow_id, "outer": outer_id, "x": self.player.x, "y": self.player.y, "dx": dx, "dy": dy, "life": 90})
             self.active_laser = None
 
     def spawn_enemy(self):
         if self.enemies_remaining <= 0: return
         side = random.choice(["top", "bottom", "left", "right"])
-        if side == "top": x, y = random.randint(30, 870), 75
-        elif side == "bottom": x, y = random.randint(30, 870), 675
-        elif side == "left": x, y = 25, random.randint(75, 675)
-        else: x, y = 875, random.randint(75, 675)
-        e_id = self.canvas.create_rectangle(x, y, x+18, y+18, fill="#ef4444", outline="#fca5a5", width=1)
-        self.enemies.append({"id": e_id, "base_speed": random.uniform(1.0, 1.8), "speed": 1.5, "offset": random.uniform(0, 6.28), "timer": random.randint(40, 100), "mode": "flank", "x": x, "y": y})
+        if side == "top": x, y = random.randint(30, WINDOW_WIDTH-30), 80
+        elif side == "bottom": x, y = random.randint(30, WINDOW_WIDTH-30), WINDOW_HEIGHT-30
+        elif side == "left": x, y = 30, random.randint(80, WINDOW_HEIGHT-30)
+        else: x, y = WINDOW_WIDTH-30, random.randint(80, WINDOW_HEIGHT-30)
+        
+        en = Enemy(self.canvas, x, y)
+        self.enemies.append(en)
         self.enemies_remaining -= 1
 
     def update_game(self):
+        self.anim_tick += 1
+        
         if len(self.enemies) == 0 and self.enemies_remaining > 0:
             for _ in range(min(5, self.enemies_remaining)):
                 self.spawn_enemy()
@@ -153,59 +158,60 @@ class Game:
             if self.laser_stamina >= 100.0:
                 self.laser_exhausted = False
             
-        dist_to_mouse = math.hypot(self.mouse_x - self.player_x, self.mouse_y - self.player_y)
+        dist_to_mouse = math.hypot(self.mouse_x - self.player.x, self.mouse_y - self.player.y)
         if dist_to_mouse > 5:
-            angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
-            current_speed = min(self.max_speed * (1.4 if self.is_ramming else 1.0), dist_to_mouse * 0.08)
+            angle = math.atan2(self.mouse_y - self.player.y, self.mouse_x - self.player.x)
+            current_speed = min(PLAYER_SPEED * (1.4 if self.is_ramming else 1.0), dist_to_mouse * 0.08)
             move_x = math.cos(angle) * current_speed
             move_y = math.sin(angle) * current_speed
-            self.player_x += move_x
-            self.player_y += move_y
+            self.player.x += move_x
+            self.player.y += move_y
             
             if current_speed > 1.5:
-                p_id = self.canvas.create_oval(self.player_x-3, self.player_y-3, self.player_x+3, self.player_y+3, fill="#d8b4fe", outline="")
-                self.particles.append({"x": self.player_x, "y": self.player_y, "dx": random.uniform(-1.5, 1.5), "dy": random.uniform(-1.5, 1.5), "life": 14, "color": "#c084fc", "id": p_id})
+                p_id = self.canvas.create_oval(self.player.x-3, self.player.y-3, self.player.x+3, self.player.y+3, fill="#d8b4fe", outline="")
+                self.particles.append({"x": self.player.x, "y": self.player.y, "dx": random.uniform(-1.5, 1.5), "dy": random.uniform(-1.5, 1.5), "life": 14, "color": "#c084fc", "id": p_id})
         
-        self.player_x = max(self.player_size+20, min(900-self.player_size-20, self.player_x))
-        self.player_y = max(55+self.player_size+20, min(700-self.player_size-20, self.player_y))
+        self.player.x = max(self.player.size+15, min(WINDOW_WIDTH-self.player.size-15, self.player.x))
+        self.player.y = max(65+self.player.size+15, min(WINDOW_HEIGHT-self.player.size-15, self.player.y))
         
-        self.canvas.coords(self.player_id, self.player_x, self.player_y-self.player_size, self.player_x+self.player_size, self.player_y, self.player_x, self.player_y+self.player_size, self.player_x-self.player_size, self.player_y)
+        self.player.update_coords(self.anim_tick)
         
         if self.is_ramming:
             aura_col = "#ff007f" if (self.spawn_counter // 3) % 2 == 0 else "#ff69b4"
-            self.canvas.coords(self.ram_aura, self.player_x-28, self.player_y-28, self.player_x+28, self.player_y+28)
+            self.canvas.coords(self.ram_aura, self.player.x-28, self.player.y-28, self.player.x+28, self.player.y+28)
             self.canvas.itemconfig(self.ram_aura, outline=aura_col, width=3)
         else:
             self.canvas.coords(self.ram_aura, 0, 0, 0, 0)
         
-        p_trail = self.canvas.create_polygon(self.player_x, self.player_y-self.player_size, self.player_x+self.player_size, self.player_y, self.player_x, self.player_y+self.player_size, self.player_x-self.player_size, self.player_y, fill="", outline="#581c87", width=1)
+        ps = self.player.size
+        p_trail = self.canvas.create_polygon(self.player.x, self.player.y-ps, self.player.x+ps, self.player.y, self.player.x, self.player.y+ps, self.player.x-ps, self.player.y, fill="", outline="#581c87", width=1)
         self.trails.append({"id": p_trail, "life": 4})
 
         if self.right_clicked and self.active_laser:
-            target_angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
+            target_angle = math.atan2(self.mouse_y - self.player.y, self.mouse_x - self.player.x)
             diff = (target_angle - self.laser_angle + math.pi) % (2 * math.pi) - math.pi
-            self.laser_angle += diff * 0.08
+            self.laser_angle += diff * 0.04
             
             length = 1500
-            lx2 = self.player_x + math.cos(self.laser_angle) * length
-            ly2 = self.player_y + math.sin(self.laser_angle) * length
+            lx2 = self.player.x + math.cos(self.laser_angle) * length
+            ly2 = self.player.y + math.sin(self.laser_angle) * length
             
-            self.canvas.coords(self.active_laser["outer"], self.player_x, self.player_y, lx2, ly2)
-            self.canvas.coords(self.active_laser["glow"], self.player_x, self.player_y, lx2, ly2)
-            self.canvas.coords(self.active_laser["core"], self.player_x, self.player_y, lx2, ly2)
+            self.canvas.coords(self.active_laser["outer"], self.player.x, self.player.y, lx2, ly2)
+            self.canvas.coords(self.active_laser["glow"], self.player.x, self.player.y, lx2, ly2)
+            self.canvas.coords(self.active_laser["core"], self.player.x, self.player.y, lx2, ly2)
             
             for enemy in self.enemies[:]:
-                e_coords = self.canvas.coords(enemy["id"])
+                e_coords = self.canvas.coords(enemy.body)
                 if not e_coords: continue
                 ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
-                v1x, v1y = ex - self.player_x, ey - self.player_y
+                v1x, v1y = ex - self.player.x, ey - self.player.y
                 dirx, diry = math.cos(self.laser_angle), math.sin(self.laser_angle)
                 proj = v1x * dirx + v1y * diry
                 if 0 <= proj <= length:
-                    cx = self.player_x + dirx * proj
-                    cy = self.player_y + diry * proj
+                    cx = self.player.x + dirx * proj
+                    cy = self.player.y + diry * proj
                     if math.hypot(ex - cx, ey - cy) < 16:
-                        self.canvas.delete(enemy["id"])
+                        enemy.delete()
                         self.enemies.remove(enemy)
                         for _ in range(10):
                             self.particles.append({"x": ex, "y": ey, "dx": random.uniform(-5, 5), "dy": random.uniform(-5, 5), "life": 12, "color": "#ff00ff", "id": self.canvas.create_rectangle(ex-2, ey-2, ex+2, ey+2, fill="#ffa07a", outline="")})
@@ -232,7 +238,7 @@ class Game:
             self.canvas.coords(fl["core"], fl["x"], fl["y"], lx2, ly2)
             
             for enemy in self.enemies[:]:
-                e_coords = self.canvas.coords(enemy["id"])
+                e_coords = self.canvas.coords(enemy.body)
                 if not e_coords: continue
                 ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
                 v1x, v1y = ex - fl["x"], ey - fl["y"]
@@ -242,65 +248,78 @@ class Game:
                     cx = fl["x"] + dirx * proj
                     cy = fl["y"] + diry * proj
                     if math.hypot(ex - cx, ey - cy) < 16:
-                        self.canvas.delete(enemy["id"])
+                        enemy.delete()
                         self.enemies.remove(enemy)
                         for _ in range(10):
                             self.particles.append({"x": ex, "y": ey, "dx": random.uniform(-5, 5), "dy": random.uniform(-5, 5), "life": 12, "color": "#ff00ff", "id": self.canvas.create_rectangle(ex-2, ey-2, ex+2, ey+2, fill="#ffa07a", outline="")})
 
-        self.canvas.coords(self.aim_line, self.player_x, self.player_y, self.mouse_x, self.mouse_y)
+        self.canvas.coords(self.aim_line, self.player.x, self.player.y, self.mouse_x, self.mouse_y)
         self.canvas.coords(self.crosshair, self.mouse_x-8, self.mouse_y-8, self.mouse_x+8, self.mouse_y+8)
 
         for enemy in self.enemies[:]:
-            e_coords = self.canvas.coords(enemy["id"])
+            e_coords = self.canvas.coords(enemy.body)
             if not e_coords: continue
             ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
             
-            if self.is_ramming and math.hypot(self.player_x-ex, self.player_y-ey) < (self.player_size + 24):
-                self.canvas.delete(enemy["id"])
+            e_pulse = math.sin(self.anim_tick * 0.2 + enemy.offset) * 2
+            self.canvas.coords(enemy.outer, ex-11-e_pulse, ey-11-e_pulse, ex+11+e_pulse, ey+11+e_pulse)
+            
+            e_cols = ["#ef4444", "#f97316", "#dc2626", "#b91c1c"]
+            self.canvas.itemconfig(enemy.body, fill=e_cols[(self.anim_tick // 3) % len(e_cols)])
+            
+            if self.is_ramming and math.hypot(self.player.x-ex, self.player.y-ey) < (self.player.size + 24):
+                enemy.delete()
                 self.enemies.remove(enemy)
                 for _ in range(12):
                     self.particles.append({"x": ex, "y": ey, "dx": random.uniform(-6, 6), "dy": random.uniform(-6, 6), "life": 15, "color": "#ff007f", "id": self.canvas.create_rectangle(ex-2, ey-2, ex+2, ey+2, fill="#ff69b4", outline="")})
                 continue
 
-            enemy["timer"] -= 1
-            if enemy["timer"] <= 0:
-                enemy["timer"] = random.randint(40, 100)
-                enemy["mode"] = random.choice(["flank", "rush", "retreat", "circle"])
-                enemy["base_speed"] = random.uniform(0.9, 2.0)
+            enemy.timer -= 1
+            if enemy.timer <= 0:
+                enemy.timer = random.randint(40, 100)
+                enemy.mode = random.choice(["flank", "rush", "retreat", "circle"])
+                enemy.base_speed = random.uniform(0.9, 2.0)
                 
-            dist = math.hypot(self.player_x-ex, self.player_y-ey)
-            base_angle = math.atan2(self.player_y-ey, self.player_x-ex)
+            dist = math.hypot(self.player.x-ex, self.player.y-ey)
+            base_angle = math.atan2(self.player.y-ey, self.player.x-ex)
             
-            if enemy["mode"] == "flank": angle = base_angle + math.sin(self.spawn_counter*0.06 + enemy["offset"])*1.4
-            elif enemy["mode"] == "rush": angle = base_angle
-            elif enemy["mode"] == "retreat" and dist < 150: angle = base_angle + math.pi
-            elif enemy["mode"] == "circle": angle = base_angle + math.pi/2
+            if enemy.mode == "flank": angle = base_angle + math.sin(self.spawn_counter*0.06 + enemy.offset)*1.4
+            elif enemy.mode == "rush": angle = base_angle
+            elif enemy.mode == "retreat" and dist < 150: angle = base_angle + math.pi
+            elif enemy.mode == "circle": angle = base_angle + math.pi/2
             else: angle = base_angle
             
-            spd = enemy["base_speed"] * (1.5 if enemy["mode"] == "rush" else 1.0)
+            spd = enemy.base_speed * (1.5 if enemy.mode == "rush" else 1.0)
             edx, edy = math.cos(angle)*spd, math.sin(angle)*spd
-            self.canvas.move(enemy["id"], edx, edy)
+            
+            self.canvas.move(enemy.body, edx, edy)
+            self.canvas.move(enemy.outer, edx, edy)
+            self.canvas.move(enemy.core, edx, edy)
             
             e_trail = self.canvas.create_rectangle(ex-9, ey-9, ex+9, ey+9, fill="", outline="#991b1b", width=1)
             self.trails.append({"id": e_trail, "life": 3})
 
-            if ey <= 60:
-                self.canvas.coords(enemy["id"], ex-9, 62, ex+9, 80)
-            if ey >= 680:
-                self.canvas.coords(enemy["id"], ex-9, 662, ex+9, 680)
-            if ex <= 20:
-                self.canvas.coords(enemy["id"], 22, ey-9, 40, ey+9)
-            if ex >= 880:
-                self.canvas.coords(enemy["id"], 860, ey-9, 878, ey+9)
+            if ey <= 65:
+                self.canvas.coords(enemy.body, ex-9, 67, ex+9, 85)
+                self.canvas.coords(enemy.core, ex-4, 72, ex+4, 80)
+            if ey >= WINDOW_HEIGHT-15:
+                self.canvas.coords(enemy.body, ex-9, WINDOW_HEIGHT-35, ex+9, WINDOW_HEIGHT-17)
+                self.canvas.coords(enemy.core, ex-4, WINDOW_HEIGHT-30, ex+4, WINDOW_HEIGHT-22)
+            if ex <= 15:
+                self.canvas.coords(enemy.body, 17, ey-9, 35, ey+9)
+                self.canvas.coords(enemy.core, 22, ey-4, 30, ey+4)
+            if ex >= WINDOW_WIDTH-15:
+                self.canvas.coords(enemy.body, WINDOW_WIDTH-35, ey-9, WINDOW_WIDTH-17, ey+9)
+                self.canvas.coords(enemy.core, WINDOW_WIDTH-30, ey-4, WINDOW_WIDTH-22, ey+4)
 
-            if dist < (self.player_size + 9):
+            if dist < (self.player.size + 9):
                 self.lives -= 1
-                self.canvas.delete(enemy["id"])
+                enemy.delete()
                 self.enemies.remove(enemy)
-                flash = self.canvas.create_rectangle(0, 50, 900, 700, fill="#ef4444", outline="")
+                flash = self.canvas.create_rectangle(0, 50, WINDOW_WIDTH, WINDOW_HEIGHT, fill="#ef4444", outline="")
                 self.root.after(40, lambda: self.canvas.delete(flash))
                 if self.lives <= 0:
-                    self.canvas.create_text(450, 375, text="GAME OVER", fill="#ef4444", font=("Consolas", 36, "bold"), anchor="center")
+                    self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, text="GAME OVER", fill="#ef4444", font=("Consolas", 36, "bold"), anchor="center")
                     return
                 break
 
@@ -318,7 +337,7 @@ class Game:
                 self.particles.remove(part)
 
         if not self.enemies and self.enemies_remaining <= 0:
-            self.canvas.create_text(450, 375, text="VICTORY!", fill="#4ade80", font=("Consolas", 36, "bold"), anchor="center")
+            self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, text="VICTORY!", fill="#4ade80", font=("Consolas", 36, "bold"), anchor="center")
             return
 
         ram_bar = "|" * int(self.ram_stamina / 10)

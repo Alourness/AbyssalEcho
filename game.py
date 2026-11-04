@@ -3,6 +3,7 @@ import math
 import random
 from config import *
 from entities import Player, Enemy
+from intro import LevelIntro
 
 class GameLevel:
     def __init__(self, root, canvas, level, on_return_menu):
@@ -32,8 +33,10 @@ class GameLevel:
         self.laser_bar_fill = self.canvas.create_rectangle(436, 19, 554, 23, fill="#a855f7", outline="")
         
         self.player = Player(self.canvas)
-        self.lives = 3
+        self.player.x = WINDOW_WIDTH / 2
+        self.player.y = (WINDOW_HEIGHT + 50) / 2
         
+        self.lives = 3
         self.ram_stamina = 100.0
         self.space_pressed = False
         self.is_ramming = False
@@ -50,36 +53,47 @@ class GameLevel:
         self.enemies_remaining = self.max_enemies
         self.spawn_counter = 0
         self.anim_tick = 0
+        
+        # Состояния игрового процесса
+        self.is_intro = True
         self.is_paused = False
         self.is_game_over = False
         self.is_victory = False
+        
+        self.intro = LevelIntro(self.canvas, self.player, self.on_intro_finish)
         
         self.enemies = []
         self.flying_lasers = []
         self.particles = []
         self.trails = []
         
-        self.mouse_x = 450
-        self.mouse_y = 375
+        self.mouse_x = WINDOW_WIDTH / 2
+        self.mouse_y = (WINDOW_HEIGHT + 50) / 2
         
         self.aim_line = self.canvas.create_line(0, 0, 0, 0, fill="#a855f7", dash=(3, 3), width=1)
         self.crosshair = self.canvas.create_oval(0, 0, 0, 0, outline="#e879f9", width=1.5)
         
-        self.pause_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, text="PAUSED", fill="#ffffff", font=("Consolas", 36, "bold"), anchor="center", state="hidden")
+        self.pause_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2, text="PAUSED", fill="#ffffff", font=("Consolas", 40, "bold"), anchor="center", state="hidden")
         
-        self.victory_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 40, text="VICTORY!", fill="#4ade80", font=("Consolas", 36, "bold"), anchor="center", state="hidden")
-        self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 110, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 - 10, WINDOW_HEIGHT/2 + 60, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
-        self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 40, text="RESTART", fill="#f3e8ff", font=("Consolas", 11, "bold"), anchor="center", state="hidden")
+        self.victory_shadow = self.canvas.create_text(WINDOW_WIDTH/2 + 3, WINDOW_HEIGHT/2 - 47, text="VICTORY", fill="#022c22", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
+        self.victory_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 50, text="VICTORY", fill="#4ade80", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
         
-        self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 60, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
-        self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 40, text="MENU", fill="#f3e8ff", font=("Consolas", 11, "bold"), anchor="center", state="hidden")
+        self.gameover_shadow = self.canvas.create_text(WINDOW_WIDTH/2 + 3, WINDOW_HEIGHT/2 - 47, text="GAME OVER", fill="#450a0a", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
+        self.gameover_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 50, text="GAME OVER", fill="#ef4444", font=("Consolas", 52, "bold"), anchor="center", state="hidden")
 
-        self.gameover_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 - 20, text="GAME OVER", fill="#ef4444", font=("Consolas", 36, "bold"), anchor="center", state="hidden")
+        self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 110, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 - 10, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
+        self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 45, text="RESTART", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
+        
+        self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
+        self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 45, text="MENU", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
 
-        for _ in range(5): self.spawn_enemy()
         if self.loop_id:
             self.root.after_cancel(self.loop_id)
         self.update_game()
+
+    def on_intro_finish(self):
+        self.is_intro = False
+        for _ in range(5): self.spawn_enemy()
 
     def draw_stone_arena(self):
         for x in range(0, WINDOW_WIDTH, 50):
@@ -121,17 +135,17 @@ class GameLevel:
 
     def handle_click(self, x, y):
         if self.is_victory:
-            if WINDOW_WIDTH/2 - 110 <= x <= WINDOW_WIDTH/2 - 10 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 60:
+            if WINDOW_WIDTH/2 - 110 <= x <= WINDOW_WIDTH/2 - 10 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
                 self.setup_level()
-            elif WINDOW_WIDTH/2 + 10 <= x <= WINDOW_WIDTH/2 + 110 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 60:
+            elif WINDOW_WIDTH/2 + 10 <= x <= WINDOW_WIDTH/2 + 110 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
                 self.stop()
                 self.on_return_menu()
         elif self.is_game_over:
-            if WINDOW_WIDTH/2 - 60 <= x <= WINDOW_WIDTH/2 + 60 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 60:
+            if WINDOW_WIDTH/2 - 60 <= x <= WINDOW_WIDTH/2 + 60 and WINDOW_HEIGHT/2 + 20 <= y <= WINDOW_HEIGHT/2 + 70:
                 self.setup_level()
 
     def on_right_press(self, event):
-        if not self.is_running or self.is_paused or self.is_game_over or self.is_victory: return
+        if self.is_intro or not self.is_running or self.is_paused or self.is_game_over or self.is_victory: return
         if self.mouse_y <= 65 or self.laser_stamina <= 0 or self.laser_exhausted or self.active_laser: return
         self.right_clicked = True
         target_angle = math.atan2(self.mouse_y - self.player.y, self.mouse_x - self.player.x)
@@ -157,6 +171,13 @@ class GameLevel:
 
     def update_game(self):
         if not self.is_running: return
+
+        if self.is_intro:
+            self.intro.update()
+            self.anim_tick += 1
+            self.player.update_coords(self.anim_tick)
+            self.loop_id = self.root.after(16, self.update_game)
+            return
 
         if not self.is_paused and not self.is_game_over and not self.is_victory:
             self.anim_tick += 1
@@ -362,9 +383,15 @@ class GameLevel:
                     self.root.after(40, lambda: self.canvas.delete(flash))
                     if self.lives <= 0:
                         self.is_game_over = True
+                        self.canvas.tag_raise(self.gameover_shadow)
+                        self.canvas.tag_raise(self.gameover_text)
+                        self.canvas.tag_raise(self.restart_btn)
+                        self.canvas.tag_raise(self.restart_text)
+                        
+                        self.canvas.itemconfig(self.gameover_shadow, state="normal")
                         self.canvas.itemconfig(self.gameover_text, state="normal")
-                        self.restart_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 - 60, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 60, fill="#1e1b4b", outline="#ef4444", width=2)
-                        self.restart_text = self.canvas.create_text(WINDOW_WIDTH/2, WINDOW_HEIGHT/2 + 40, text="RESTART", fill="#f3e8ff", font=("Consolas", 11, "bold"), anchor="center")
+                        self.canvas.itemconfig(self.restart_btn, state="normal")
+                        self.canvas.itemconfig(self.restart_text, state="normal")
                         return
                     break
 
@@ -383,6 +410,14 @@ class GameLevel:
 
             if not self.enemies and self.enemies_remaining <= 0:
                 self.is_victory = True
+                self.canvas.tag_raise(self.victory_shadow)
+                self.canvas.tag_raise(self.victory_text)
+                self.canvas.tag_raise(self.restart_btn)
+                self.canvas.tag_raise(self.restart_text)
+                self.canvas.tag_raise(self.next_btn)
+                self.canvas.tag_raise(self.next_text)
+                
+                self.canvas.itemconfig(self.victory_shadow, state="normal")
                 self.canvas.itemconfig(self.victory_text, state="normal")
                 self.canvas.itemconfig(self.restart_btn, state="normal")
                 self.canvas.itemconfig(self.restart_text, state="normal")

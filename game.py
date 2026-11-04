@@ -49,7 +49,6 @@ class GameLevel:
         self.active_laser = None
         self.laser_angle = 0.0
         
-        # Настройка врагов в зависимости от уровня
         if self.level == 2:
             self.max_enemies = 40
         else:
@@ -89,7 +88,6 @@ class GameLevel:
         self.next_btn = self.canvas.create_rectangle(WINDOW_WIDTH/2 + 10, WINDOW_HEIGHT/2 + 20, WINDOW_WIDTH/2 + 110, WINDOW_HEIGHT/2 + 70, fill="#1e1b4b", outline="#c084fc", width=2, state="hidden")
         self.next_text = self.canvas.create_text(WINDOW_WIDTH/2 + 60, WINDOW_HEIGHT/2 + 45, text="NEXT" if self.level < 3 else "MENU", fill="#f3e8ff", font=("Consolas", 12, "bold"), anchor="center", state="hidden")
 
-        # Сразу спавним первых врагов при старте уровня
         for _ in range(5): 
             self.spawn_enemy()
 
@@ -126,7 +124,6 @@ class GameLevel:
     def spawn_enemy(self):
         if self.enemies_remaining <= 0: return
         
-        # На 2 уровне последний враг — это босс
         if self.level == 2 and self.enemies_remaining == 1 and not self.boss:
             self.boss = Boss(self.canvas, WINDOW_WIDTH / 2, 120)
             self.enemies_remaining -= 1
@@ -473,5 +470,6 @@ class GameLevel:
             self.canvas.coords(self.laser_bar_fill, 436, 19, 436 + int(118 * (self.laser_stamina / 100.0)), 23)
             self.canvas.itemconfig(self.ui_lives, text=f"LIVES: {self.lives}")
 
+        # ГАРАНТИРОВАННЫЙ ЗАПУСК СЛЕДУЮЩЕГО КАДРА ИГРОВОГО ЦИКЛА
         if self.is_running:
             self.loop_id = self.root.after(16, self.update_game)

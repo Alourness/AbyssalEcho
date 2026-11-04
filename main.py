@@ -9,12 +9,12 @@ class Game:
         self.root.geometry("900x700")
         self.root.resizable(False, False)
         
-        self.canvas = tk.Canvas(root, width=900, height=700, bg="#07070c", highlightthickness=0)
+        self.canvas = tk.Canvas(root, width=900, height=700, bg="#050508", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         
-        self.draw_background_debris()
+        self.draw_environment()
         
-        self.canvas.create_rectangle(0, 0, 900, 50, fill="#11111a", outline="#1c1c2e", width=2)
+        self.canvas.create_rectangle(0, 0, 900, 50, fill="#0d0d14", outline="#1a1a2e", width=2)
         self.ui_text = self.canvas.create_text(20, 25, anchor="w", fill="#d8b4fe", font=("Consolas", 10, "bold"), text="")
         
         self.player_x = 450
@@ -31,16 +31,17 @@ class Game:
         self.ram_exhausted = False
         self.ram_aura = self.canvas.create_oval(0, 0, 0, 0, outline="", width=2)
         
-        self.shoot_stamina = 100.0
+        self.laser_stamina = 100.0
         self.right_clicked = False
-        self.shoot_cooldown = 0
-        self.shoot_exhausted = False
+        self.laser_exhausted = False
+        self.active_laser = None
+        self.laser_angle = 0.0
         
         self.enemies_remaining = 25
         self.spawn_counter = 0
         
         self.enemies = []
-        self.projectiles = []
+        self.flying_lasers = []
         self.particles = []
         self.trails = []
         
@@ -51,47 +52,63 @@ class Game:
         self.crosshair = self.canvas.create_oval(0, 0, 0, 0, outline="#e879f9", width=1.5)
         
         self.canvas.bind("<Motion>", self.on_mouse_move)
-        self.canvas.bind("<ButtonPress-3>", lambda e: setattr(self, "right_clicked", True))
-        self.canvas.bind("<ButtonRelease-3>", lambda e: setattr(self, "right_clicked", False))
+        self.canvas.bind("<ButtonPress-3>", self.on_right_press)
+        self.canvas.bind("<ButtonRelease-3>", self.on_right_release)
         self.root.bind("<KeyPress-space>", lambda e: setattr(self, "space_pressed", True))
         self.root.bind("<KeyRelease-space>", lambda e: setattr(self, "space_pressed", False))
         
         for _ in range(5): self.spawn_enemy()
         self.update_game()
 
-    def draw_background_debris(self):
-        for _ in range(35):
-            x, y = random.randint(20, 880), random.randint(65, 680)
-            sz = random.randint(2, 6)
-            self.canvas.create_polygon(x, y-sz, x+sz, y, x, y+sz, x-sz, y, fill="#12121e", outline="#1e1e30", width=1)
+    def draw_environment(self):
+        for x in range(0, 900, 60):
+            self.canvas.create_line(x, 50, x, 700, fill="#0a0a10", width=1)
+        for y in range(50, 700, 60):
+            self.canvas.create_line(0, y, 900, y, fill="#0a0a10", width=1)
+            
+        self.canvas.create_rectangle(8, 58, 892, 692, outline="#3b0764", width=3)
+        self.canvas.create_rectangle(12, 62, 888, 688, outline="#1e1b4b", width=1)
+        
+        for _ in range(40):
+            x, y = random.randint(30, 870), random.randint(75, 675)
+            sz = random.randint(2, 5)
+            self.canvas.create_polygon(x, y-sz, x+sz, y, x, y+sz, x-sz, y, fill="#131324", outline="#2b1055", width=1)
 
     def on_mouse_move(self, event):
         self.mouse_x = max(0, min(900, event.x))
         self.mouse_y = max(50, min(700, event.y))
 
-    def shoot_plasma(self):
-        if self.mouse_y <= 50 or self.shoot_stamina <= 0 or self.shoot_cooldown > 0 or self.shoot_exhausted: return
-        self.shoot_stamina = max(0.0, self.shoot_stamina - 15.0)
-        if self.shoot_stamina <= 5.0:
-            self.shoot_exhausted = True
-        self.shoot_cooldown = 12
+    def on_right_press(self, event):
+        if self.mouse_y <= 50 or self.laser_stamina <= 0 or self.laser_exhausted or self.active_laser: return
+        self.right_clicked = True
+        target_angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
+        self.laser_angle = target_angle
         
-        angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
-        spd = 24
-        dx, dy = math.cos(angle) * spd, math.sin(angle) * spd
-        p_id = self.canvas.create_line(self.player_x, self.player_y, self.player_x + dx*0.8, self.player_y + dy*0.8, fill="#e879f9", width=7)
-        self.projectiles.append({"id": p_id, "dx": dx, "dy": dy, "x": self.player_x, "y": self.player_y, "life": 120})
-        
-        for _ in range(6):
-            self.particles.append({"x": self.player_x, "y": self.player_y, "dx": random.uniform(-3, 3), "dy": random.uniform(-3, 3), "life": 10, "color": "#c084fc", "id": self.canvas.create_oval(self.player_x-2, self.player_y-2, self.player_x+2, self.player_y+2, fill="#f0abfc", outline="")})
+        core_id = self.canvas.create_line(0, 0, 0, 0, fill="#ffffff", width=4)
+        glow_id = self.canvas.create_line(0, 0, 0, 0, fill="#ff00ff", width=12)
+        outer_id = self.canvas.create_line(0, 0, 0, 0, fill="#8b5cf6", width=20)
+        self.active_laser = {"core": core_id, "glow": glow_id, "outer": outer_id}
+
+    def on_right_release(self, event):
+        if not self.right_clicked: return
+        self.right_clicked = False
+        if self.active_laser:
+            core_id = self.active_laser["core"]
+            glow_id = self.active_laser["glow"]
+            outer_id = self.active_laser["outer"]
+            
+            dx = math.cos(self.laser_angle) * 22
+            dy = math.sin(self.laser_angle) * 22
+            self.flying_lasers.append({"core": core_id, "glow": glow_id, "outer": outer_id, "x": self.player_x, "y": self.player_y, "dx": dx, "dy": dy, "life": 90})
+            self.active_laser = None
 
     def spawn_enemy(self):
         if self.enemies_remaining <= 0: return
         side = random.choice(["top", "bottom", "left", "right"])
-        if side == "top": x, y = random.randint(0, 900), 60
-        elif side == "bottom": x, y = random.randint(0, 900), 690
-        elif side == "left": x, y = 0, random.randint(60, 700)
-        else: x, y = 900, random.randint(60, 700)
+        if side == "top": x, y = random.randint(30, 870), 75
+        elif side == "bottom": x, y = random.randint(30, 870), 675
+        elif side == "left": x, y = 25, random.randint(75, 675)
+        else: x, y = 875, random.randint(75, 675)
         e_id = self.canvas.create_rectangle(x, y, x+18, y+18, fill="#ef4444", outline="#fca5a5", width=1)
         self.enemies.append({"id": e_id, "base_speed": random.uniform(1.0, 1.8), "speed": 1.5, "offset": random.uniform(0, 6.28), "timer": random.randint(40, 100), "mode": "flank", "x": x, "y": y})
         self.enemies_remaining -= 1
@@ -107,12 +124,17 @@ class Game:
             self.spawn_counter = 0
             for _ in range(5): self.spawn_enemy()
             
-        if self.shoot_cooldown > 0:
-            self.shoot_cooldown -= 1
-            
         if self.right_clicked:
-            self.shoot_plasma()
-            
+            self.laser_stamina = max(0.0, self.laser_stamina - 1.2)
+            if self.laser_stamina <= 5.0:
+                self.laser_exhausted = True
+                self.right_clicked = False
+                if self.active_laser:
+                    self.canvas.delete(self.active_laser["core"])
+                    self.canvas.delete(self.active_laser["glow"])
+                    self.canvas.delete(self.active_laser["outer"])
+                    self.active_laser = None
+                
         if self.space_pressed and self.ram_stamina > 0 and not self.ram_exhausted:
             self.is_ramming = True
             self.ram_stamina = max(0.0, self.ram_stamina - 4.5)
@@ -126,10 +148,10 @@ class Game:
                 self.ram_exhausted = False
             
         if not self.right_clicked:
-            regen = 0.75 if self.shoot_exhausted else 1.5
-            self.shoot_stamina = min(100.0, self.shoot_stamina + regen)
-            if self.shoot_stamina >= 100.0:
-                self.shoot_exhausted = False
+            regen = 0.75 if self.laser_exhausted else 1.5
+            self.laser_stamina = min(100.0, self.laser_stamina + regen)
+            if self.laser_stamina >= 100.0:
+                self.laser_exhausted = False
             
         dist_to_mouse = math.hypot(self.mouse_x - self.player_x, self.mouse_y - self.player_y)
         if dist_to_mouse > 5:
@@ -144,8 +166,8 @@ class Game:
                 p_id = self.canvas.create_oval(self.player_x-3, self.player_y-3, self.player_x+3, self.player_y+3, fill="#d8b4fe", outline="")
                 self.particles.append({"x": self.player_x, "y": self.player_y, "dx": random.uniform(-1.5, 1.5), "dy": random.uniform(-1.5, 1.5), "life": 14, "color": "#c084fc", "id": p_id})
         
-        self.player_x = max(self.player_size+15, min(900-self.player_size-15, self.player_x))
-        self.player_y = max(50+self.player_size+15, min(700-self.player_size-15, self.player_y))
+        self.player_x = max(self.player_size+20, min(900-self.player_size-20, self.player_x))
+        self.player_y = max(55+self.player_size+20, min(700-self.player_size-20, self.player_y))
         
         self.canvas.coords(self.player_id, self.player_x, self.player_y-self.player_size, self.player_x+self.player_size, self.player_y, self.player_x, self.player_y+self.player_size, self.player_x-self.player_size, self.player_y)
         
@@ -159,43 +181,74 @@ class Game:
         p_trail = self.canvas.create_polygon(self.player_x, self.player_y-self.player_size, self.player_x+self.player_size, self.player_y, self.player_x, self.player_y+self.player_size, self.player_x-self.player_size, self.player_y, fill="", outline="#581c87", width=1)
         self.trails.append({"id": p_trail, "life": 4})
 
-        self.canvas.coords(self.aim_line, self.player_x, self.player_y, self.mouse_x, self.mouse_y)
-        self.canvas.coords(self.crosshair, self.mouse_x-8, self.mouse_y-8, self.mouse_x+8, self.mouse_y+8)
-
-        for p in self.projectiles[:]:
-            p["life"] -= 1
-            if p["life"] <= 0:
-                self.canvas.delete(p["id"])
-                self.projectiles.remove(p)
-                continue
-
-            self.canvas.move(p["id"], p["dx"], p["dy"])
-            p["x"] += p["dx"]
-            p["y"] += p["dy"]
+        if self.right_clicked and self.active_laser:
+            target_angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
+            diff = (target_angle - self.laser_angle + math.pi) % (2 * math.pi) - math.pi
+            self.laser_angle += diff * 0.08
             
-            p_trail = self.canvas.create_line(p["x"]-p["dx"]*0.5, p["y"]-p["dy"]*0.5, p["x"], p["y"], fill="#a855f7", width=4)
-            self.trails.append({"id": p_trail, "life": 3})
-
-            if p["x"] > 900 or p["x"] < 0 or p["y"] > 700 or p["y"] < 50:
-                self.canvas.delete(p["id"])
-                self.projectiles.remove(p)
-                continue
-
-            hit = False
+            length = 1500
+            lx2 = self.player_x + math.cos(self.laser_angle) * length
+            ly2 = self.player_y + math.sin(self.laser_angle) * length
+            
+            self.canvas.coords(self.active_laser["outer"], self.player_x, self.player_y, lx2, ly2)
+            self.canvas.coords(self.active_laser["glow"], self.player_x, self.player_y, lx2, ly2)
+            self.canvas.coords(self.active_laser["core"], self.player_x, self.player_y, lx2, ly2)
+            
             for enemy in self.enemies[:]:
                 e_coords = self.canvas.coords(enemy["id"])
                 if not e_coords: continue
-                if e_coords[0] <= p["x"] <= e_coords[2] and e_coords[1] <= p["y"] <= e_coords[3]:
-                    self.canvas.delete(enemy["id"])
-                    self.enemies.remove(enemy)
-                    hit = True
-                    for _ in range(10):
-                        self.particles.append({"x": p["x"], "y": p["y"], "dx": random.uniform(-5, 5), "dy": random.uniform(-5, 5), "life": 12, "color": "#f43f5e", "id": self.canvas.create_rectangle(p["x"]-2, p["y"]-2, p["x"]+2, p["y"]+2, fill="#fca5a5", outline="")})
-                    break
+                ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
+                v1x, v1y = ex - self.player_x, ey - self.player_y
+                dirx, diry = math.cos(self.laser_angle), math.sin(self.laser_angle)
+                proj = v1x * dirx + v1y * diry
+                if 0 <= proj <= length:
+                    cx = self.player_x + dirx * proj
+                    cy = self.player_y + diry * proj
+                    if math.hypot(ex - cx, ey - cy) < 16:
+                        self.canvas.delete(enemy["id"])
+                        self.enemies.remove(enemy)
+                        for _ in range(10):
+                            self.particles.append({"x": ex, "y": ey, "dx": random.uniform(-5, 5), "dy": random.uniform(-5, 5), "life": 12, "color": "#ff00ff", "id": self.canvas.create_rectangle(ex-2, ey-2, ex+2, ey+2, fill="#ffa07a", outline="")})
 
-            if hit:
-                self.canvas.delete(p["id"])
-                self.projectiles.remove(p)
+        for fl in self.flying_lasers[:]:
+            fl["life"] -= 1
+            if fl["life"] <= 0:
+                self.canvas.delete(fl["core"])
+                self.canvas.delete(fl["glow"])
+                self.canvas.delete(fl["outer"])
+                self.flying_lasers.remove(fl)
+                continue
+            
+            fl["x"] += fl["dx"]
+            fl["y"] += fl["dy"]
+            
+            length = 1500
+            angle = math.atan2(fl["dy"], fl["dx"])
+            lx2 = fl["x"] + math.cos(angle) * length
+            ly2 = fl["y"] + math.sin(angle) * length
+            
+            self.canvas.coords(fl["outer"], fl["x"], fl["y"], lx2, ly2)
+            self.canvas.coords(fl["glow"], fl["x"], fl["y"], lx2, ly2)
+            self.canvas.coords(fl["core"], fl["x"], fl["y"], lx2, ly2)
+            
+            for enemy in self.enemies[:]:
+                e_coords = self.canvas.coords(enemy["id"])
+                if not e_coords: continue
+                ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
+                v1x, v1y = ex - fl["x"], ey - fl["y"]
+                dirx, diry = math.cos(angle), math.sin(angle)
+                proj = v1x * dirx + v1y * diry
+                if 0 <= proj <= length:
+                    cx = fl["x"] + dirx * proj
+                    cy = fl["y"] + diry * proj
+                    if math.hypot(ex - cx, ey - cy) < 16:
+                        self.canvas.delete(enemy["id"])
+                        self.enemies.remove(enemy)
+                        for _ in range(10):
+                            self.particles.append({"x": ex, "y": ey, "dx": random.uniform(-5, 5), "dy": random.uniform(-5, 5), "life": 12, "color": "#ff00ff", "id": self.canvas.create_rectangle(ex-2, ey-2, ex+2, ey+2, fill="#ffa07a", outline="")})
+
+        self.canvas.coords(self.aim_line, self.player_x, self.player_y, self.mouse_x, self.mouse_y)
+        self.canvas.coords(self.crosshair, self.mouse_x-8, self.mouse_y-8, self.mouse_x+8, self.mouse_y+8)
 
         for enemy in self.enemies[:]:
             e_coords = self.canvas.coords(enemy["id"])
@@ -231,8 +284,14 @@ class Game:
             e_trail = self.canvas.create_rectangle(ex-9, ey-9, ex+9, ey+9, fill="", outline="#991b1b", width=1)
             self.trails.append({"id": e_trail, "life": 3})
 
-            if ey <= 50:
-                self.canvas.coords(enemy["id"], ex-9, 52, ex+9, 70)
+            if ey <= 60:
+                self.canvas.coords(enemy["id"], ex-9, 62, ex+9, 80)
+            if ey >= 680:
+                self.canvas.coords(enemy["id"], ex-9, 662, ex+9, 680)
+            if ex <= 20:
+                self.canvas.coords(enemy["id"], 22, ey-9, 40, ey+9)
+            if ex >= 880:
+                self.canvas.coords(enemy["id"], 860, ey-9, 878, ey+9)
 
             if dist < (self.player_size + 9):
                 self.lives -= 1
@@ -263,8 +322,8 @@ class Game:
             return
 
         ram_bar = "|" * int(self.ram_stamina / 10)
-        shoot_bar = "|" * int(self.shoot_stamina / 10)
-        self.canvas.itemconfig(self.ui_text, text=f"LIVES:{self.lives} | 🛡️:[{ram_bar:<10}] ⚡:[{shoot_bar:<10}] | ENEMY:{len(self.enemies)+self.enemies_remaining}")
+        laser_bar = "|" * int(self.laser_stamina / 10)
+        self.canvas.itemconfig(self.ui_text, text=f"LIVES:{self.lives} | 🛡️:[{ram_bar:<10}] ⚡:[{laser_bar:<10}] | ENEMY:{len(self.enemies)+self.enemies_remaining}")
         self.root.after(16, self.update_game)
 
 if __name__ == "__main__":

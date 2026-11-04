@@ -59,7 +59,7 @@ class Game:
         angle = math.atan2(self.mouse_y - self.player_y, self.mouse_x - self.player_x)
         spd = 24
         dx, dy = math.cos(angle) * spd, math.sin(angle) * spd
-        p_id = self.canvas.create_line(self.player_x, self.player_y, self.player_x + dx*0.8, self.player_y + dy*0.8, fill="#e879f9", width=3)
+        p_id = self.canvas.create_line(self.player_x, self.player_y, self.player_x + dx*0.8, self.player_y + dy*0.8, fill="#e879f9", width=5)
         self.projectiles.append({"id": p_id, "dx": dx, "dy": dy, "x": self.player_x, "y": self.player_y})
         
         for _ in range(6):
@@ -73,12 +73,12 @@ class Game:
         elif side == "left": x, y = 0, random.randint(55, 640)
         else: x, y = 800, random.randint(55, 640)
         e_id = self.canvas.create_rectangle(x, y, x+18, y+18, fill="#ef4444", outline="#fca5a5", width=1)
-        self.enemies.append({"id": e_id, "base_speed": random.uniform(0.6, 1.3), "speed": 1.0, "offset": random.uniform(0, 6.28), "timer": random.randint(50, 120), "mode": "flank", "x": x, "y": y})
+        self.enemies.append({"id": e_id, "base_speed": random.uniform(1.0, 1.8), "speed": 1.5, "offset": random.uniform(0, 6.28), "timer": random.randint(40, 100), "mode": "flank", "x": x, "y": y})
         self.enemies_remaining -= 1
 
     def update_game(self):
         self.spawn_counter += 1
-        if self.spawn_counter >= 560:
+        if self.spawn_counter >= 420:
             self.spawn_counter = 0
             for _ in range(5): self.spawn_enemy()
             
@@ -107,11 +107,30 @@ class Game:
         self.canvas.coords(self.crosshair, self.mouse_x-8, self.mouse_y-8, self.mouse_x+8, self.mouse_y+8)
 
         for p in self.projectiles[:]:
+            closest_enemy = None
+            min_dist = float('inf')
+            for e in self.enemies:
+                e_coords = self.canvas.coords(e["id"])
+                if not e_coords: continue
+                ex, ey = (e_coords[0]+e_coords[2])/2, (e_coords[1]+e_coords[3])/2
+                d = math.hypot(ex - p["x"], ey - p["y"])
+                if d < min_dist:
+                    min_dist = d
+                    closest_enemy = (ex, ey)
+            
+            if closest_enemy and min_dist < 220:
+                target_angle = math.atan2(closest_enemy[1] - p["y"], closest_enemy[0] - p["x"])
+                speed = math.hypot(p["dx"], p["dy"])
+                target_dx = math.cos(target_angle) * speed
+                target_dy = math.sin(target_angle) * speed
+                p["dx"] = p["dx"] * 0.94 + target_dx * 0.06
+                p["dy"] = p["dy"] * 0.94 + target_dy * 0.06
+
             self.canvas.move(p["id"], p["dx"], p["dy"])
             p["x"] += p["dx"]
             p["y"] += p["dy"]
             
-            p_trail = self.canvas.create_line(p["x"]-p["dx"]*0.5, p["y"]-p["dy"]*0.5, p["x"], p["y"], fill="#a855f7", width=2)
+            p_trail = self.canvas.create_line(p["x"]-p["dx"]*0.5, p["y"]-p["dy"]*0.5, p["x"], p["y"], fill="#a855f7", width=3)
             self.trails.append({"id": p_trail, "life": 3})
 
             if p["x"] > 800 or p["x"] < 0 or p["y"] > 640 or p["y"] < 45:
@@ -138,9 +157,9 @@ class Game:
         for enemy in self.enemies:
             enemy["timer"] -= 1
             if enemy["timer"] <= 0:
-                enemy["timer"] = random.randint(50, 120)
+                enemy["timer"] = random.randint(40, 100)
                 enemy["mode"] = random.choice(["flank", "rush", "retreat", "circle"])
-                enemy["base_speed"] = random.uniform(0.5, 1.8)
+                enemy["base_speed"] = random.uniform(0.9, 2.0)
                 
             e_coords = self.canvas.coords(enemy["id"])
             if not e_coords: continue
@@ -181,7 +200,7 @@ class Game:
         for part in self.particles[:]:
             self.canvas.move(part["id"], part["dx"], part["dy"])
             part["life"] -= 1
-            if part["life"]<=0:
+            if part["life"] <= 0:
                 self.canvas.delete(part["id"])
                 self.particles.remove(part)
 
